@@ -249,6 +249,31 @@ input:focus, select:focus, textarea:focus {
 
 .entri-form { border-top: 1px dashed var(--border); padding-top: 14px; }
 
+.chip.divisi { background: var(--primary-soft); color: var(--primary); }
+.chip.j-coral { background: rgba(201,100,66,.16); color: var(--coral); }
+.chip.j-teal  { background: rgba(63,156,142,.18); color: var(--teal); }
+.chip.j-amber { background: rgba(209,144,35,.18); color: var(--amber); }
+
+/* Filter bar dashboard */
+.filter-bar { padding: 16px 20px; }
+.filter-grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  align-items: end;
+}
+.filter-grid .field { margin: 0; }
+.filter-reset button { width: 100%; }
+
+/* Header tabel yang bisa di-sort */
+.tbl-sort thead th[data-sort] { cursor: pointer; user-select: none; white-space: nowrap; }
+.tbl-sort thead th[data-sort]:hover { color: var(--text); }
+.rincian-teks { max-width: 320px; }
+#tbl-rincian td { vertical-align: top; }
+
+@media (max-width: 720px) {
+  .filter-grid { grid-template-columns: 1fr 1fr; }
+}
+
 #tbl-nunggu .bar-fill { background: var(--plum); }
 #tbl-jenis  .bar-fill { background: var(--amber); }
 #tbl-status .bar-fill { background: var(--teal); }

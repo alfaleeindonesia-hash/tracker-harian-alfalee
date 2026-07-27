@@ -92,8 +92,8 @@
               <textarea id="f-rencana" rows="2" placeholder="Satu rencana / tugas untuk hari ini…"></textarea>
             </div>
             <div class="field">
-              <label for="f-terkait">Terkait</label>
-              <select id="f-terkait"></select>
+              <label for="f-divisi">Divisi</label>
+              <select id="f-divisi"></select>
             </div>
             <div class="sec-foot">
               <span id="info-rencana" class="muted small"></span>
@@ -183,6 +183,40 @@
           <p id="dash-info" class="muted small"></p>
         </div>
 
+        <div class="card filter-bar">
+          <div class="filter-grid">
+            <div class="field">
+              <label for="fl-orang">Orang</label>
+              <select id="fl-orang"></select>
+            </div>
+            <div class="field">
+              <label for="fl-divisi">Divisi</label>
+              <select id="fl-divisi"></select>
+            </div>
+            <div class="field">
+              <label for="fl-jenis">Jenis</label>
+              <select id="fl-jenis">
+                <option value="">Semua</option>
+                <option value="rencana">Rencana</option>
+                <option value="realisasi">Realisasi</option>
+                <option value="kendala">Kendala</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="fl-mulai">Tanggal mulai</label>
+              <input type="date" id="fl-mulai" />
+            </div>
+            <div class="field">
+              <label for="fl-akhir">Tanggal akhir</label>
+              <input type="date" id="fl-akhir" />
+            </div>
+            <div class="field filter-reset">
+              <label>&nbsp;</label>
+              <button id="fl-reset" class="btn btn-ghost small" type="button">Tampilkan semua</button>
+            </div>
+          </div>
+        </div>
+
         <div class="card accent-coral">
           <h3>1. Kepatuhan Pengisian</h3>
           <div class="table-wrap">
@@ -222,6 +256,27 @@
             <div class="table-wrap">
               <table class="tbl" id="tbl-status"><thead></thead><tbody></tbody></table>
             </div>
+          </div>
+        </div>
+
+        <div class="card accent-plum">
+          <h3>Rincian Item <span id="rincian-count" class="hint"></span></h3>
+          <p class="muted small">Klik judul kolom untuk mengurutkan. Arahkan kursor ke isi untuk melihat sumbernya.</p>
+          <div class="table-wrap">
+            <table class="tbl tbl-sort" id="tbl-rincian">
+              <thead>
+                <tr>
+                  <th data-sort="tanggal">Tanggal</th>
+                  <th data-sort="pengisi">Orang</th>
+                  <th data-sort="jenis">Jenis</th>
+                  <th data-sort="divisi">Divisi</th>
+                  <th>Isi</th>
+                  <th>Detail</th>
+                  <th data-sort="createdAt">Waktu</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
           </div>
         </div>
       </div>

@@ -52,16 +52,16 @@ export const ADMIN_EMAILS = ["alfaleeindonesia@gmail.com"];
 
 // --- 6. Vokabulari dropdown (VERBATIM dari Google Sheet — jangan diubah) -----
 export const DROPDOWN = {
-  terkait: [
-    "Campaign",
-    "Storyboard/Konten",
-    "TGNC",
-    "Community & CRM",
-    "Sales & Follow-up",
-    "Event/#MHGNgopi",
-    "Sistem & SOP",
-    "Koordinasi Klien",
-    "Lainnya",
+  // "Terkait" pada Rencana = Divisi (8 divisi)
+  divisi: [
+    "Media Company Builder",
+    "Monetization Strategist",
+    "Sales Execution Machine (B2B & B2C)",
+    "CRM & Community",
+    "Digital Publisher",
+    "Capital Strategist",
+    "HR & Team Builder",
+    "Performance Analytics",
   ],
   status: [
     "Selesai",
