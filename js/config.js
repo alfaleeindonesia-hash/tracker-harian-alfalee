@@ -44,7 +44,7 @@ export const ALLOWLIST = {
   "alfaleeindonesia@gmail.com": "KIKY",
   "hanifrexx@gmail.com": "HANIF",
   "daffa.msubhan@gmail.com": "DAFFA",
-  // "emailsyifa@gmail.com": "SYIFA",   // menyusul
+  "aqliyahsyifa@gmail.com": "SYIFA",
 };
 
 // --- 5. Admin: bisa isi & edit tab semua orang ------------------------------

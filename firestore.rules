@@ -26,8 +26,8 @@ service cloud.firestore {
         "muhammadsyarifaliakbarsyah@gmail.com": "ALI",
         "alfaleeindonesia@gmail.com": "KIKY",
         "hanifrexx@gmail.com": "HANIF",
-        "daffa.msubhan@gmail.com": "DAFFA"
-        // "emailsyifa@gmail.com": "SYIFA"    // menyusul
+        "daffa.msubhan@gmail.com": "DAFFA",
+        "aqliyahsyifa@gmail.com": "SYIFA"
       };
     }
 
