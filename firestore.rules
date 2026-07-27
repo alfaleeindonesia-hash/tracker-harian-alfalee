@@ -1,0 +1,68 @@
+rules_version = '2';
+
+// ============================================================================
+// ATURAN KEAMANAN FIRESTORE — Tracker Harian Alfalee × MHG
+// ============================================================================
+// Tempelkan isi file ini di Firebase Console:
+//   Build > Firestore Database > tab "Rules" > ganti semua > Publish
+//
+// Inti aturan:
+//   - Hanya email di allowlist (email terverifikasi Google) yang bisa akses.
+//   - Semua anggota bisa MEMBACA semua laporan (untuk dashboard).
+//   - Tiap anggota hanya bisa MENULIS laporan miliknya sendiri.
+//   - Admin bisa menulis laporan siapa pun.
+//
+// Menambah anggota baru: cukup tambah 1 baris di allowlist() di bawah,
+// LALU tambah baris yang sama di js/config.js (ALLOWLIST) & Publish ulang.
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // email (huruf kecil) -> kode pengisi
+    function allowlist() {
+      return {
+        "derkaizerz@gmail.com": "ABDAN",
+        "muhammadsyarifaliakbarsyah@gmail.com": "ALI",
+        "alfaleeindonesia@gmail.com": "KIKY",
+        "hanifrexx@gmail.com": "HANIF"
+        // "emaildaffa@gmail.com": "DAFFA",   // menyusul
+        // "emailsyifa@gmail.com": "SYIFA"    // menyusul
+      };
+    }
+
+    function admins() {
+      return ["alfaleeindonesia@gmail.com"];
+    }
+
+    function emailSaya() {
+      return request.auth.token.email.lower();
+    }
+
+    function terdaftar() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && emailSaya() in allowlist();
+    }
+
+    function isAdmin() {
+      return terdaftar() && emailSaya() in admins();
+    }
+
+    function kodeSaya() {
+      return allowlist()[emailSaya()];
+    }
+
+    match /laporan/{docId} {
+      allow read: if terdaftar();
+      allow create, update: if terdaftar()
+        && (isAdmin() || request.resource.data.pengisi == kodeSaya());
+      allow delete: if isAdmin();
+    }
+
+    // Tolak akses ke koleksi lain.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
