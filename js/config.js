@@ -43,7 +43,7 @@ export const ALLOWLIST = {
   "muhammadsyarifaliakbarsyah@gmail.com": "ALI",
   "alfaleeindonesia@gmail.com": "KIKY",
   "hanifrexx@gmail.com": "HANIF",
-  // "emaildaffa@gmail.com": "DAFFA",   // menyusul
+  "daffa.msubhan@gmail.com": "DAFFA",
   // "emailsyifa@gmail.com": "SYIFA",   // menyusul
 };
 
