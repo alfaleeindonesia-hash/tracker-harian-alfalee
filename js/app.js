@@ -1,5 +1,5 @@
 // ============================================================================
-// APP — kontrol utama: login, form input, dashboard
+// APP — kontrol utama: login, form input (3 bagian terpisah), dashboard
 // ============================================================================
 import {
   auth, db, provider,
@@ -10,14 +10,22 @@ import {
   ROSTER, URUTAN_PENGISI, ALLOWLIST, ADMIN_EMAILS, DROPDOWN, AMBANG_KEPATUHAN,
 } from "./config.js";
 import {
-  hariIni, namaHari, hariKerjaSampai, statusIsi, esc, linkify,
+  hariIni, namaHari, fromISODate, hariKerjaSampai, statusIsi, esc,
 } from "./util.js";
 
 const COLLECTION = "laporan";
 
-// State sesi login
+// Deadline tiap bagian (jam lokal). null = tanpa aturan waktu.
+const DEADLINE = { rencana: 10, realisasi: 21, kendala: null };
+
+// Field milik tiap bagian
+const FIELDS = {
+  rencana: ["rencana", "terkait"],
+  realisasi: ["realisasi", "output", "status", "rencanaBesok"],
+  kendala: ["kendala", "jenisKendala", "nungguSiapa"],
+};
+
 let sesi = { email: null, pengisi: null, isAdmin: false };
-// Cache seluruh laporan (docId -> data), diperbarui real-time
 let laporanCache = new Map();
 let unsubLaporan = null;
 
@@ -42,15 +50,12 @@ function initAuth() {
 
   onAuthStateChanged(auth, (user) => {
     if (!user) return showScreen("login");
-
     const email = (user.email || "").toLowerCase();
     const pengisi = ALLOWLIST[email];
-
     if (!pengisi) {
       $("#denied-email").textContent = email;
       return showScreen("denied");
     }
-
     sesi = { email, pengisi, isAdmin: ADMIN_EMAILS.includes(email) };
     onMasuk(user);
   });
@@ -69,9 +74,7 @@ function showScreen(name) {
 function onMasuk(user) {
   $("#user-nama").textContent = ROSTER[sesi.pengisi]?.nama || sesi.pengisi;
   $("#user-email").textContent = sesi.email;
-  $("#user-badge").textContent = sesi.isAdmin
-    ? "Admin"
-    : ROSTER[sesi.pengisi]?.peran || "";
+  $("#user-badge").textContent = sesi.isAdmin ? "Admin" : ROSTER[sesi.pengisi]?.peran || "";
   if (user.photoURL) {
     const img = $("#user-foto");
     img.src = user.photoURL;
@@ -80,13 +83,13 @@ function onMasuk(user) {
 
   buildFormStatis();
   setupNav();
-  langgananLaporan(); // mulai dengarkan data real-time
+  langgananLaporan();
   showScreen("app");
   gotoTab("form");
 }
 
 // ---------------------------------------------------------------------------
-// NAVIGASI TAB
+// NAVIGASI
 // ---------------------------------------------------------------------------
 function setupNav() {
   document.querySelectorAll(".nav-btn").forEach((b) =>
@@ -104,22 +107,16 @@ function gotoTab(tab) {
 }
 
 // ---------------------------------------------------------------------------
-// FORM INPUT
+// FORM
 // ---------------------------------------------------------------------------
-function opsi(list, terpilih) {
+function opsi(list) {
   return (
     `<option value="">— pilih —</option>` +
-    list
-      .map(
-        (v) =>
-          `<option value="${esc(v)}"${v === terpilih ? " selected" : ""}>${esc(v)}</option>`
-      )
-      .join("")
+    list.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("")
   );
 }
 
 function buildFormStatis() {
-  // Pilih pengisi (admin bisa memilih siapa saja)
   const wrapPengisi = $("#wrap-pengisi");
   if (sesi.isAdmin) {
     wrapPengisi.hidden = false;
@@ -127,118 +124,134 @@ function buildFormStatis() {
       (k) => `<option value="${k}">${esc(ROSTER[k].nama)} — ${esc(ROSTER[k].peran)}</option>`
     ).join("");
     $("#f-pengisi").value = sesi.pengisi;
+    $("#f-pengisi").addEventListener("change", muatFormUntukTanggal);
   } else {
     wrapPengisi.hidden = true;
   }
 
-  // Dropdown vokabulari
   $("#f-terkait").innerHTML = opsi(DROPDOWN.terkait);
   $("#f-status").innerHTML = opsi(DROPDOWN.status);
   $("#f-jenisKendala").innerHTML = opsi(DROPDOWN.jenisKendala);
   $("#f-nungguSiapa").innerHTML = opsi(DROPDOWN.nungguSiapa);
 
-  // Tanggal default hari ini
-  const tgl = $("#f-tanggal");
-  tgl.value = hariIni();
+  $("#f-tanggal").value = hariIni();
+  $("#f-tanggal").addEventListener("change", muatFormUntukTanggal);
 
-  // Listener
-  tgl.addEventListener("change", muatFormUntukTanggal);
-  $("#f-pengisi").addEventListener("change", muatFormUntukTanggal);
   ["#f-rencana", "#f-realisasi"].forEach((s) =>
     $(s).addEventListener("input", updateStatusIsiLive)
   );
-  $("#form-laporan").addEventListener("submit", simpanLaporan);
+
+  // Tiga penyimpanan terpisah
+  $("#form-rencana").addEventListener("submit", (e) => simpanBagian("rencana", e));
+  $("#form-realisasi").addEventListener("submit", (e) => simpanBagian("realisasi", e));
+  $("#form-kendala").addEventListener("submit", (e) => simpanBagian("kendala", e));
 }
 
 function pengisiAktif() {
   return sesi.isAdmin ? $("#f-pengisi").value : sesi.pengisi;
 }
+function idAktif() {
+  return `${pengisiAktif()}__${$("#f-tanggal").value}`;
+}
 
 function muatFormUntukTanggal() {
   const tanggal = $("#f-tanggal").value;
-  const pengisi = pengisiAktif();
   if (!tanggal) return;
-
   $("#f-hari").textContent = namaHari(tanggal);
-  const id = `${pengisi}__${tanggal}`;
-  const data = laporanCache.get(id) || {};
+  const data = laporanCache.get(idAktif()) || {};
 
   $("#f-rencana").value = data.rencana || "";
+  $("#f-terkait").value = data.terkait || "";
   $("#f-realisasi").value = data.realisasi || "";
   $("#f-output").value = data.output || "";
-  $("#f-terkait").value = data.terkait || "";
   $("#f-status").value = data.status || "";
+  $("#f-rencanaBesok").value = data.rencanaBesok || "";
   $("#f-kendala").value = data.kendala || "";
   $("#f-jenisKendala").value = data.jenisKendala || "";
   $("#f-nungguSiapa").value = data.nungguSiapa || "";
-  $("#f-rencanaBesok").value = data.rencanaBesok || "";
 
-  $("#simpan-info").textContent = data.updatedAt
-    ? "Terakhir disimpan oleh " + (data.updatedByEmail || "?")
-    : "Belum ada isian untuk tanggal ini.";
-  updateStatusIsiLive();
-  renderRiwayat();
+  ["rencana", "realisasi", "kendala"].forEach((b) => ($("#info-" + b).textContent = ""));
+  refreshMeta();
 }
 
-function bacaForm() {
-  return {
-    rencana: $("#f-rencana").value.trim(),
-    realisasi: $("#f-realisasi").value.trim(),
-    output: $("#f-output").value.trim(),
-    terkait: $("#f-terkait").value,
-    status: $("#f-status").value,
-    kendala: $("#f-kendala").value.trim(),
-    jenisKendala: $("#f-jenisKendala").value,
-    nungguSiapa: $("#f-nungguSiapa").value,
-    rencanaBesok: $("#f-rencanaBesok").value.trim(),
-  };
+// Perbarui label waktu tiap bagian + status isi (TANPA menyentuh input)
+function refreshMeta() {
+  const tanggal = $("#f-tanggal").value;
+  const data = laporanCache.get(idAktif()) || {};
+  renderMetaBagian("#meta-rencana", data, "rencana", tanggal);
+  renderMetaBagian("#meta-realisasi", data, "realisasi", tanggal);
+  renderMetaBagian("#meta-kendala", data, "kendala", tanggal);
+  updateStatusIsiLive();
+}
+
+function renderMetaBagian(sel, data, bagian, tanggalISO) {
+  const span = $(sel);
+  const created = data[bagian + "CreatedAt"];
+  const updated = data[bagian + "UpdatedAt"];
+  if (!created && !updated) {
+    span.className = "meta muted";
+    span.textContent = "Belum diisi";
+    return;
+  }
+  let html = `Diisi ${fmtWaktu(created)}`;
+  const ot = tepatWaktu(created, tanggalISO, DEADLINE[bagian]);
+  if (ot === true) html += ` <span class="pill tiny ontime">Tepat waktu</span>`;
+  else if (ot === false) html += ` <span class="pill tiny late">Terlambat</span>`;
+  if (sudahDiedit(created, updated)) html += ` · diedit ${fmtWaktu(updated)}`;
+  const by = data[bagian + "By"];
+  if (by) html += ` <span class="muted">· ${esc(by)}</span>`;
+  span.className = "meta";
+  span.innerHTML = html;
 }
 
 function updateStatusIsiLive() {
-  const s = statusIsi(bacaForm());
+  const s = statusIsi({ rencana: $("#f-rencana").value, realisasi: $("#f-realisasi").value });
   const el = $("#f-statusisi");
   el.textContent = s;
   el.className = "pill " + kelasStatusIsi(s);
 }
 
-async function simpanLaporan(e) {
+async function simpanBagian(bagian, e) {
   e.preventDefault();
   const tanggal = $("#f-tanggal").value;
   const pengisi = pengisiAktif();
   if (!tanggal) return;
 
-  const btn = $("#btn-simpan");
+  const btn = $("#btn-" + bagian);
+  const info = $("#info-" + bagian);
   btn.disabled = true;
+  const labelAsli = btn.textContent;
   btn.textContent = "Menyimpan…";
 
-  const payload = {
-    ...bacaForm(),
-    pengisi,
-    tanggal,
-    hari: namaHari(tanggal),
-    updatedByEmail: sesi.email,
-    updatedAt: serverTimestamp(),
-  };
+  const existing = laporanCache.get(`${pengisi}__${tanggal}`) || {};
+  const now = serverTimestamp();
+
+  const payload = { pengisi, tanggal, hari: namaHari(tanggal) };
+  for (const f of FIELDS[bagian]) payload[f] = $("#f-" + f).value.trim();
+  payload[bagian + "UpdatedAt"] = now;
+  payload[bagian + "By"] = sesi.email;
+  if (!existing[bagian + "CreatedAt"]) payload[bagian + "CreatedAt"] = now;
 
   try {
-    const id = `${pengisi}__${tanggal}`;
-    await setDoc(doc(collection(db, COLLECTION), id), payload, { merge: true });
-    $("#simpan-info").textContent = "✓ Tersimpan " + new Date().toLocaleTimeString("id-ID");
+    await setDoc(doc(collection(db, COLLECTION), `${pengisi}__${tanggal}`), payload, { merge: true });
+    info.textContent = "✓ Tersimpan " + new Date().toLocaleTimeString("id-ID");
   } catch (err) {
-    $("#simpan-info").textContent = "Gagal menyimpan: " + (err?.message || err);
+    info.textContent = "Gagal: " + (err?.message || err);
   } finally {
     btn.disabled = false;
-    btn.textContent = "Simpan";
+    btn.textContent = labelAsli;
   }
 }
 
-// Riwayat isian orang aktif (10 terbaru)
+// ---------------------------------------------------------------------------
+// RIWAYAT
+// ---------------------------------------------------------------------------
 function renderRiwayat() {
   const pengisi = pengisiAktif();
   const rows = [...laporanCache.values()]
     .filter((d) => d.pengisi === pengisi)
     .sort((a, b) => (a.tanggal < b.tanggal ? 1 : -1))
-    .slice(0, 10);
+    .slice(0, 12);
 
   const tbody = $("#riwayat-body");
   if (!rows.length) {
@@ -247,20 +260,73 @@ function renderRiwayat() {
   }
   tbody.innerHTML = rows
     .map((d) => {
-      const s = statusIsi(d);
+      const le = editTerakhir(d);
       return `<tr>
-        <td>${esc(d.tanggal)}</td>
-        <td>${esc(d.hari || namaHari(d.tanggal))}</td>
-        <td>${esc(d.terkait || "—")}</td>
-        <td>${esc(d.status || "—")}</td>
-        <td><span class="pill ${kelasStatusIsi(s)}">${esc(s)}</span></td>
+        <td><strong>${esc(d.tanggal)}</strong><br><span class="muted small">${esc(d.hari || namaHari(d.tanggal))}</span></td>
+        <td>${selWaktu(d, "rencana")}</td>
+        <td>${selWaktu(d, "realisasi")}</td>
+        <td>${selWaktu(d, "kendala")}</td>
+        <td>${le ? `${fmtWaktu(le.at)}<br><span class="muted small">${esc(le.by || "")}</span>` : "—"}</td>
       </tr>`;
     })
     .join("");
 }
 
+function selWaktu(d, bagian) {
+  const created = d[bagian + "CreatedAt"];
+  const updated = d[bagian + "UpdatedAt"];
+  if (!created && !updated) return `<span class="muted">—</span>`;
+  const ot = tepatWaktu(created, d.tanggal, DEADLINE[bagian]);
+  let badge = "";
+  if (ot === true) badge = ` <span class="pill tiny ontime">tepat</span>`;
+  else if (ot === false) badge = ` <span class="pill tiny late">telat</span>`;
+  const edit = sudahDiedit(created, updated) ? `<br><span class="muted small">diedit ${fmtWaktu(updated)}</span>` : "";
+  return `${fmtWaktu(created)}${badge}${edit}`;
+}
+
+function editTerakhir(d) {
+  let best = null;
+  for (const b of ["rencana", "realisasi", "kendala"]) {
+    const u = d[b + "UpdatedAt"];
+    if (u && u.seconds && (!best || u.seconds > best.sec)) {
+      best = { sec: u.seconds, at: u, by: d[b + "By"] };
+    }
+  }
+  return best;
+}
+
 // ---------------------------------------------------------------------------
-// LANGGANAN DATA REAL-TIME
+// WAKTU
+// ---------------------------------------------------------------------------
+function toDate(ts) {
+  if (!ts) return null;
+  if (ts.toDate) return ts.toDate();
+  if (ts.seconds) return new Date(ts.seconds * 1000);
+  return null;
+}
+function fmtWaktu(ts) {
+  const d = toDate(ts);
+  if (!d) return "…"; // serverTimestamp masih pending
+  return d.toLocaleString("id-ID", {
+    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+  });
+}
+function tepatWaktu(createdTs, tanggalISO, deadlineHour) {
+  if (deadlineHour == null) return null;
+  const created = toDate(createdTs);
+  if (!created || !tanggalISO) return null;
+  const dl = fromISODate(tanggalISO);
+  dl.setHours(deadlineHour, 0, 0, 0);
+  return created <= dl;
+}
+function sudahDiedit(createdTs, updatedTs) {
+  const c = toDate(createdTs), u = toDate(updatedTs);
+  if (!c || !u) return false;
+  return u.getTime() - c.getTime() > 1000; // beda > 1 detik
+}
+
+// ---------------------------------------------------------------------------
+// DATA REAL-TIME
 // ---------------------------------------------------------------------------
 function langgananLaporan() {
   if (unsubLaporan) unsubLaporan();
@@ -269,12 +335,10 @@ function langgananLaporan() {
     (snap) => {
       laporanCache = new Map();
       snap.forEach((d) => laporanCache.set(d.id, d.data()));
-      // segarkan tampilan aktif
       if (!$("#view-dashboard").hidden) renderDashboard();
       if (!$("#view-form").hidden) {
         renderRiwayat();
-        const id = `${pengisiAktif()}__${$("#f-tanggal").value}`;
-        // jangan timpa ketikan; hanya info
+        refreshMeta(); // perbarui label waktu tanpa mengubah input
       }
     },
     (err) => {
@@ -301,14 +365,12 @@ function kelasStatusIsi(s) {
 function renderDashboard() {
   const workdays = hariKerjaSampai();
   $("#dash-info").textContent = `Per ${hariIni()} • ${workdays.length} hari kerja • ${laporanCache.size} isian tercatat`;
-
   renderKepatuhan(workdays);
   renderHitung("nungguSiapa", "#tbl-nunggu", "Pihak");
   renderHitung("jenisKendala", "#tbl-jenis", "Jenis");
   renderHitung("status", "#tbl-status", "Status");
 }
 
-// Section 1: kepatuhan per orang
 function renderKepatuhan(workdays) {
   const tbody = $("#tbl-kepatuhan tbody");
   const baris = URUTAN_PENGISI.map((pengisi) => {
@@ -321,13 +383,12 @@ function renderKepatuhan(workdays) {
       else tidak++;
     }
     const total = workdays.length || 1;
-    const persen = Math.round((lengkap / total) * 100);
-    return { pengisi, lengkap, belum, kosong, tidak, persen };
+    return { pengisi, lengkap, belum, kosong, tidak, persen: Math.round((lengkap / total) * 100) };
   });
 
   tbody.innerHTML = baris
     .map((r) => {
-      const flag = r.persen < AMBANG_KEPATUHAN ? `🚩` : `✓`;
+      const flag = r.persen < AMBANG_KEPATUHAN ? "🚩" : "✓";
       const barCls = r.persen < AMBANG_KEPATUHAN ? "bad" : r.persen < 95 ? "warn" : "ok";
       return `<tr>
         <td><strong>${esc(ROSTER[r.pengisi].nama)}</strong></td>
@@ -336,17 +397,13 @@ function renderKepatuhan(workdays) {
         <td class="num">${r.belum}</td>
         <td class="num">${r.kosong}</td>
         <td class="num">${r.tidak}</td>
-        <td>
-          <div class="bar"><span class="bar-fill ${barCls}" style="width:${r.persen}%"></span></div>
-          <span class="num">${r.persen}%</span>
-        </td>
+        <td><div class="bar"><span class="bar-fill ${barCls}" style="width:${r.persen}%"></span></div><span class="num">${r.persen}%</span></td>
         <td class="center">${flag}</td>
       </tr>`;
     })
     .join("");
 }
 
-// Section 2–4: hitung frekuensi nilai suatu field di semua laporan
 function renderHitung(field, tblSel, labelKolom) {
   const counts = new Map();
   for (const d of laporanCache.values()) {
@@ -358,8 +415,7 @@ function renderHitung(field, tblSel, labelKolom) {
   const maxV = rows.length ? rows[0][1] : 0;
 
   const tbl = $(tblSel);
-  tbl.querySelector("thead").innerHTML =
-    `<tr><th>${esc(labelKolom)}</th><th class="num">Total</th></tr>`;
+  tbl.querySelector("thead").innerHTML = `<tr><th>${esc(labelKolom)}</th><th class="num">Total</th></tr>`;
   const tbody = tbl.querySelector("tbody");
   if (!rows.length) {
     tbody.innerHTML = `<tr><td colspan="2" class="muted">Belum ada data.</td></tr>`;
@@ -368,9 +424,7 @@ function renderHitung(field, tblSel, labelKolom) {
   tbody.innerHTML = rows
     .map(
       ([k, v]) => `<tr>
-        <td>${esc(k)}
-          <div class="bar mini"><span class="bar-fill" style="width:${maxV ? (v / maxV) * 100 : 0}%"></span></div>
-        </td>
+        <td>${esc(k)}<div class="bar mini"><span class="bar-fill" style="width:${maxV ? (v / maxV) * 100 : 0}%"></span></div></td>
         <td class="num">${v}</td>
       </tr>`
     )

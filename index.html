@@ -63,9 +63,7 @@
 
       <!-- VIEW: FORM -->
       <div id="view-form" class="view">
-        <form id="form-laporan" class="card form">
-          <h2>Isi Laporan Harian</h2>
-
+        <div class="card form-top">
           <div class="grid-2">
             <div class="field" id="wrap-pengisi" hidden>
               <label for="f-pengisi">Pengisi (admin)</label>
@@ -74,41 +72,72 @@
             <div class="field">
               <label for="f-tanggal">Tanggal</label>
               <input type="date" id="f-tanggal" />
-              <small class="muted">Hari: <strong id="f-hari">—</strong></small>
+              <small class="muted">Hari: <strong id="f-hari">—</strong> · Status Isi:
+                <span id="f-statusisi" class="pill">—</span></small>
             </div>
           </div>
+        </div>
 
+        <!-- 1. RENCANA (pagi, sebelum 10.00) -->
+        <form id="form-rencana" class="card sec accent-coral">
+          <div class="sec-head">
+            <h3>1. Rencana <span class="hint">— pagi, sebelum 10.00</span></h3>
+            <span id="meta-rencana" class="meta muted">Belum diisi</span>
+          </div>
           <div class="field">
-            <label for="f-rencana">Rencana Hari Ini <span class="hint">(maks 10.00)</span></label>
+            <label for="f-rencana">Rencana Hari Ini</label>
             <textarea id="f-rencana" rows="2" placeholder="Apa yang direncanakan hari ini…"></textarea>
           </div>
+          <div class="field">
+            <label for="f-terkait">Terkait</label>
+            <select id="f-terkait"></select>
+          </div>
+          <div class="sec-foot">
+            <span id="info-rencana" class="muted small"></span>
+            <button type="submit" id="btn-rencana" class="btn btn-primary">Simpan Rencana</button>
+          </div>
+        </form>
 
+        <!-- 2. REALISASI (malam, sebelum 21.00) -->
+        <form id="form-realisasi" class="card sec accent-teal">
+          <div class="sec-head">
+            <h3>2. Realisasi <span class="hint">— sebelum 21.00</span></h3>
+            <span id="meta-realisasi" class="meta muted">Belum diisi</span>
+          </div>
           <div class="field">
             <label for="f-realisasi">Realisasi s/d 21.00</label>
             <textarea id="f-realisasi" rows="2" placeholder="Apa yang benar-benar selesai…"></textarea>
           </div>
-
           <div class="field">
             <label for="f-output">Output / Bukti (link)</label>
             <input type="text" id="f-output" placeholder="https://… atau keterangan bukti" />
           </div>
-
           <div class="grid-2">
-            <div class="field">
-              <label for="f-terkait">Terkait</label>
-              <select id="f-terkait"></select>
-            </div>
             <div class="field">
               <label for="f-status">Status</label>
               <select id="f-status"></select>
             </div>
+            <div class="field">
+              <label for="f-rencanaBesok">Rencana Besok</label>
+              <input type="text" id="f-rencanaBesok" placeholder="Rencana singkat untuk besok…" />
+            </div>
           </div>
+          <div class="sec-foot">
+            <span id="info-realisasi" class="muted small"></span>
+            <button type="submit" id="btn-realisasi" class="btn btn-primary">Simpan Realisasi</button>
+          </div>
+        </form>
 
+        <!-- 3. KENDALA (terpisah) -->
+        <form id="form-kendala" class="card sec accent-amber">
+          <div class="sec-head">
+            <h3>3. Kendala <span class="hint">— terpisah</span></h3>
+            <span id="meta-kendala" class="meta muted">Belum diisi</span>
+          </div>
           <div class="field">
             <label for="f-kendala">Kendala <span class="hint">(fakta, bukan opini)</span></label>
             <textarea id="f-kendala" rows="2" placeholder="Fakta kendala…"></textarea>
           </div>
-
           <div class="grid-2">
             <div class="field">
               <label for="f-jenisKendala">Jenis Kendala</label>
@@ -119,20 +148,10 @@
               <select id="f-nungguSiapa"></select>
             </div>
           </div>
-
-          <div class="field">
-            <label for="f-rencanaBesok">Rencana Besok</label>
-            <textarea id="f-rencanaBesok" rows="2" placeholder="Rencana untuk besok…"></textarea>
+          <div class="sec-foot">
+            <span id="info-kendala" class="muted small"></span>
+            <button type="submit" id="btn-kendala" class="btn btn-primary">Simpan Kendala</button>
           </div>
-
-          <div class="form-footer">
-            <div>
-              <span class="muted">Status Isi: </span>
-              <span id="f-statusisi" class="pill">—</span>
-            </div>
-            <button type="submit" id="btn-simpan" class="btn btn-primary">Simpan</button>
-          </div>
-          <p id="simpan-info" class="muted small"></p>
         </form>
 
         <div class="card">
@@ -140,7 +159,13 @@
           <div class="table-wrap">
             <table class="tbl">
               <thead>
-                <tr><th>Tanggal</th><th>Hari</th><th>Terkait</th><th>Status</th><th>Status Isi</th></tr>
+                <tr>
+                  <th>Tanggal</th>
+                  <th>Rencana diisi</th>
+                  <th>Realisasi diisi</th>
+                  <th>Kendala diisi</th>
+                  <th>Terakhir diedit</th>
+                </tr>
               </thead>
               <tbody id="riwayat-body"></tbody>
             </table>

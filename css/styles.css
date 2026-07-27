@@ -201,10 +201,26 @@ input:focus, select:focus, textarea:focus {
 .card.accent-plum  { border-top: 4px solid var(--plum); }
 .card.accent-amber { border-top: 4px solid var(--amber); }
 .card.accent-teal  { border-top: 4px solid var(--teal); }
-.card.accent-coral > h3 { color: var(--coral); }
-.card.accent-plum  > h3 { color: var(--plum); }
-.card.accent-amber > h3 { color: var(--amber); }
-.card.accent-teal  > h3 { color: var(--teal); }
+.card.accent-coral h3 { color: var(--coral); }
+.card.accent-plum  h3 { color: var(--plum); }
+.card.accent-amber h3 { color: var(--amber); }
+.card.accent-teal  h3 { color: var(--teal); }
+
+/* Bagian form terpisah */
+.form-top { padding: 16px 22px; }
+.sec-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; margin-bottom: 12px; flex-wrap: wrap;
+}
+.sec-head h3 { margin: 0; }
+.meta { font-size: .82rem; }
+.sec-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-top: 8px; padding-top: 14px; border-top: 1px solid var(--border);
+}
+.pill.tiny { font-size: .68rem; padding: 1px 8px; }
+.pill.ontime { background: rgba(46,146,100,.16); color: var(--ok); border-color: transparent; }
+.pill.late   { background: rgba(209,80,63,.16);  color: var(--bad); border-color: transparent; }
 
 #tbl-nunggu .bar-fill { background: var(--plum); }
 #tbl-jenis  .bar-fill { background: var(--amber); }
