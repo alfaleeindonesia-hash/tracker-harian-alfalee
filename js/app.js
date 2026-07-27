@@ -1,35 +1,43 @@
 // ============================================================================
-// APP — kontrol utama: login, form input (3 bagian terpisah), dashboard
+// APP — model item: daftar Rencana/Realisasi/Kendala per hari + tambah/edit/hapus
 // ============================================================================
 import {
   auth, db, provider,
   signInWithPopup, signOut, onAuthStateChanged,
-  collection, doc, setDoc, onSnapshot, serverTimestamp,
+  collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp,
 } from "./firebase.js";
 import {
   ROSTER, URUTAN_PENGISI, ALLOWLIST, ADMIN_EMAILS, DROPDOWN, AMBANG_KEPATUHAN,
 } from "./config.js";
-import {
-  hariIni, namaHari, fromISODate, hariKerjaSampai, statusIsi, esc,
-} from "./util.js";
+import { hariIni, namaHari, fromISODate, hariKerjaSampai, esc } from "./util.js";
 
-const COLLECTION = "laporan";
+const COLLECTION = "entri";
 
-// Deadline tiap bagian (jam lokal). null = tanpa aturan waktu.
-const DEADLINE = { rencana: 10, realisasi: 21, kendala: null };
-
-// Field milik tiap bagian
-const FIELDS = {
-  rencana: ["rencana", "terkait"],
-  realisasi: ["realisasi", "output", "status", "rencanaBesok"],
-  kendala: ["kendala", "jenisKendala", "nungguSiapa"],
+// Definisi tiap bagian: deadline (jam) + peta field -> selector input
+const SECTIONS = {
+  rencana: {
+    deadline: 10,
+    labelAdd: "Tambah Rencana",
+    fields: { teks: "#f-rencana", terkait: "#f-terkait" },
+  },
+  realisasi: {
+    deadline: 21,
+    labelAdd: "Tambah Realisasi",
+    fields: { teks: "#f-realisasi", output: "#f-output", status: "#f-status" },
+  },
+  kendala: {
+    deadline: null,
+    labelAdd: "Tambah Kendala",
+    fields: { teks: "#f-kendala", jenisKendala: "#f-jenisKendala", nungguSiapa: "#f-nungguSiapa" },
+  },
 };
+const JENIS = ["rencana", "realisasi", "kendala"];
 
 let sesi = { email: null, pengisi: null, isAdmin: false };
-let laporanCache = new Map();
-let unsubLaporan = null;
+let cache = new Map(); // id -> { id, ...data }
+let unsub = null;
 
-const $ = (sel) => document.querySelector(sel);
+const $ = (s) => document.querySelector(s);
 
 // ---------------------------------------------------------------------------
 // AUTENTIKASI
@@ -37,25 +45,17 @@ const $ = (sel) => document.querySelector(sel);
 function initAuth() {
   $("#btn-login").addEventListener("click", async () => {
     $("#login-error").textContent = "";
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (e) {
-      $("#login-error").textContent = "Gagal login: " + (e?.message || e);
-    }
+    try { await signInWithPopup(auth, provider); }
+    catch (e) { $("#login-error").textContent = "Gagal login: " + (e?.message || e); }
   });
-
   document.querySelectorAll(".btn-logout").forEach((b) =>
     b.addEventListener("click", () => signOut(auth))
   );
-
   onAuthStateChanged(auth, (user) => {
     if (!user) return showScreen("login");
     const email = (user.email || "").toLowerCase();
     const pengisi = ALLOWLIST[email];
-    if (!pengisi) {
-      $("#denied-email").textContent = email;
-      return showScreen("denied");
-    }
+    if (!pengisi) { $("#denied-email").textContent = email; return showScreen("denied"); }
     sesi = { email, pengisi, isAdmin: ADMIN_EMAILS.includes(email) };
     onMasuk(user);
   });
@@ -68,22 +68,14 @@ function showScreen(name) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// SETELAH MASUK
-// ---------------------------------------------------------------------------
 function onMasuk(user) {
   $("#user-nama").textContent = ROSTER[sesi.pengisi]?.nama || sesi.pengisi;
   $("#user-email").textContent = sesi.email;
   $("#user-badge").textContent = sesi.isAdmin ? "Admin" : ROSTER[sesi.pengisi]?.peran || "";
-  if (user.photoURL) {
-    const img = $("#user-foto");
-    img.src = user.photoURL;
-    img.hidden = false;
-  }
-
-  buildFormStatis();
+  if (user.photoURL) { const img = $("#user-foto"); img.src = user.photoURL; img.hidden = false; }
+  buildStatis();
   setupNav();
-  langgananLaporan();
+  langganan();
   showScreen("app");
   gotoTab("form");
 }
@@ -102,31 +94,28 @@ function gotoTab(tab) {
   );
   $("#view-form").hidden = tab !== "form";
   $("#view-dashboard").hidden = tab !== "dashboard";
-  if (tab === "form") muatFormUntukTanggal();
+  if (tab === "form") renderSemua();
   if (tab === "dashboard") renderDashboard();
 }
 
 // ---------------------------------------------------------------------------
-// FORM
+// SETUP STATIS
 // ---------------------------------------------------------------------------
 function opsi(list) {
-  return (
-    `<option value="">— pilih —</option>` +
-    list.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("")
-  );
+  return `<option value="">— pilih —</option>` +
+    list.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
 }
 
-function buildFormStatis() {
-  const wrapPengisi = $("#wrap-pengisi");
+function buildStatis() {
   if (sesi.isAdmin) {
-    wrapPengisi.hidden = false;
+    $("#wrap-pengisi").hidden = false;
     $("#f-pengisi").innerHTML = URUTAN_PENGISI.map(
       (k) => `<option value="${k}">${esc(ROSTER[k].nama)} — ${esc(ROSTER[k].peran)}</option>`
     ).join("");
     $("#f-pengisi").value = sesi.pengisi;
-    $("#f-pengisi").addEventListener("change", muatFormUntukTanggal);
+    $("#f-pengisi").addEventListener("change", gantiKonteks);
   } else {
-    wrapPengisi.hidden = true;
+    $("#wrap-pengisi").hidden = true;
   }
 
   $("#f-terkait").innerHTML = opsi(DROPDOWN.terkait);
@@ -135,164 +124,212 @@ function buildFormStatis() {
   $("#f-nungguSiapa").innerHTML = opsi(DROPDOWN.nungguSiapa);
 
   $("#f-tanggal").value = hariIni();
-  $("#f-tanggal").addEventListener("change", muatFormUntukTanggal);
+  $("#f-tanggal").addEventListener("change", gantiKonteks);
 
-  ["#f-rencana", "#f-realisasi"].forEach((s) =>
-    $(s).addEventListener("input", updateStatusIsiLive)
-  );
+  // Realisasi: pilih rencana -> prefill teks bila kosong
+  $("#f-refRencana").addEventListener("change", () => {
+    const id = $("#f-refRencana").value;
+    const t = $("#f-realisasi");
+    if (id && cache.get(id) && !t.value.trim()) t.value = cache.get(id).teks || "";
+  });
 
-  // Tiga penyimpanan terpisah
-  $("#form-rencana").addEventListener("submit", (e) => simpanBagian("rencana", e));
-  $("#form-realisasi").addEventListener("submit", (e) => simpanBagian("realisasi", e));
-  $("#form-kendala").addEventListener("submit", (e) => simpanBagian("kendala", e));
+  // Submit / batal / aksi daftar per bagian
+  JENIS.forEach((j) => {
+    $("#form-" + j).addEventListener("submit", (e) => simpan(j, e));
+    $("#cancel-" + j).addEventListener("click", () => { resetForm(j); $("#info-" + j).textContent = ""; });
+    $("#list-" + j).addEventListener("click", (e) => {
+      const ed = e.target.closest("[data-edit]");
+      const dl = e.target.closest("[data-del]");
+      if (ed) mulaiEdit(j, ed.getAttribute("data-edit"));
+      else if (dl) hapus(dl.getAttribute("data-del"));
+    });
+  });
 }
 
-function pengisiAktif() {
-  return sesi.isAdmin ? $("#f-pengisi").value : sesi.pengisi;
-}
-function idAktif() {
-  return `${pengisiAktif()}__${$("#f-tanggal").value}`;
-}
-
-function muatFormUntukTanggal() {
-  const tanggal = $("#f-tanggal").value;
-  if (!tanggal) return;
-  $("#f-hari").textContent = namaHari(tanggal);
-  const data = laporanCache.get(idAktif()) || {};
-
-  $("#f-rencana").value = data.rencana || "";
-  $("#f-terkait").value = data.terkait || "";
-  $("#f-realisasi").value = data.realisasi || "";
-  $("#f-output").value = data.output || "";
-  $("#f-status").value = data.status || "";
-  $("#f-rencanaBesok").value = data.rencanaBesok || "";
-  $("#f-kendala").value = data.kendala || "";
-  $("#f-jenisKendala").value = data.jenisKendala || "";
-  $("#f-nungguSiapa").value = data.nungguSiapa || "";
-
-  ["rencana", "realisasi", "kendala"].forEach((b) => ($("#info-" + b).textContent = ""));
-  refreshMeta();
+// Konteks (pengisi/tanggal) berubah -> reset semua form + render ulang
+function gantiKonteks() {
+  JENIS.forEach((j) => { resetForm(j); $("#info-" + j).textContent = ""; });
+  renderSemua();
 }
 
-// Perbarui label waktu tiap bagian + status isi (TANPA menyentuh input)
-function refreshMeta() {
-  const tanggal = $("#f-tanggal").value;
-  const data = laporanCache.get(idAktif()) || {};
-  renderMetaBagian("#meta-rencana", data, "rencana", tanggal);
-  renderMetaBagian("#meta-realisasi", data, "realisasi", tanggal);
-  renderMetaBagian("#meta-kendala", data, "kendala", tanggal);
-  updateStatusIsiLive();
+// ---------------------------------------------------------------------------
+// DATA AKTIF
+// ---------------------------------------------------------------------------
+function pengisiAktif() { return sesi.isAdmin ? $("#f-pengisi").value : sesi.pengisi; }
+function tanggalAktif() { return $("#f-tanggal").value; }
+
+function itemsAktif(jenis) {
+  const p = pengisiAktif(), t = tanggalAktif();
+  return [...cache.values()]
+    .filter((it) => it.pengisi === p && it.tanggal === t && it.jenis === jenis)
+    .sort((a, b) => (a.createdAt?.seconds || Infinity) - (b.createdAt?.seconds || Infinity));
 }
 
-function renderMetaBagian(sel, data, bagian, tanggalISO) {
-  const span = $(sel);
-  const created = data[bagian + "CreatedAt"];
-  const updated = data[bagian + "UpdatedAt"];
-  if (!created && !updated) {
-    span.className = "meta muted";
-    span.textContent = "Belum diisi";
-    return;
+// ---------------------------------------------------------------------------
+// SIMPAN / EDIT / HAPUS
+// ---------------------------------------------------------------------------
+function bacaBagian(jenis) {
+  const data = {};
+  for (const [f, sel] of Object.entries(SECTIONS[jenis].fields)) data[f] = $(sel).value.trim();
+  if (jenis === "realisasi") {
+    const refId = $("#f-refRencana").value;
+    data.refId = refId || "";
+    data.refTeks = refId && cache.get(refId) ? (cache.get(refId).teks || "") : "";
   }
-  let html = `Diisi ${fmtWaktu(created)}`;
-  const ot = tepatWaktu(created, tanggalISO, DEADLINE[bagian]);
-  if (ot === true) html += ` <span class="pill tiny ontime">Tepat waktu</span>`;
-  else if (ot === false) html += ` <span class="pill tiny late">Terlambat</span>`;
-  if (sudahDiedit(created, updated)) html += ` · diedit ${fmtWaktu(updated)}`;
-  const by = data[bagian + "By"];
-  if (by) html += ` <span class="muted">· ${esc(by)}</span>`;
-  span.className = "meta";
-  span.innerHTML = html;
+  return data;
 }
 
-function updateStatusIsiLive() {
-  const s = statusIsi({ rencana: $("#f-rencana").value, realisasi: $("#f-realisasi").value });
-  const el = $("#f-statusisi");
-  el.textContent = s;
-  el.className = "pill " + kelasStatusIsi(s);
-}
-
-async function simpanBagian(bagian, e) {
+async function simpan(jenis, e) {
   e.preventDefault();
-  const tanggal = $("#f-tanggal").value;
-  const pengisi = pengisiAktif();
-  if (!tanggal) return;
+  const teks = $(SECTIONS[jenis].fields.teks).value.trim();
+  const info = $("#info-" + jenis);
+  if (!teks) { info.textContent = "Teks tidak boleh kosong."; return; }
 
-  const btn = $("#btn-" + bagian);
-  const info = $("#info-" + bagian);
+  const btn = $("#btn-" + jenis);
   btn.disabled = true;
-  const labelAsli = btn.textContent;
-  btn.textContent = "Menyimpan…";
-
-  const existing = laporanCache.get(`${pengisi}__${tanggal}`) || {};
-  const now = serverTimestamp();
-
-  const payload = { pengisi, tanggal, hari: namaHari(tanggal) };
-  for (const f of FIELDS[bagian]) payload[f] = $("#f-" + f).value.trim();
-  payload[bagian + "UpdatedAt"] = now;
-  payload[bagian + "By"] = sesi.email;
-  if (!existing[bagian + "CreatedAt"]) payload[bagian + "CreatedAt"] = now;
+  const editId = $("#edit-" + jenis).value;
+  const data = bacaBagian(jenis);
 
   try {
-    await setDoc(doc(collection(db, COLLECTION), `${pengisi}__${tanggal}`), payload, { merge: true });
-    info.textContent = "✓ Tersimpan " + new Date().toLocaleTimeString("id-ID");
+    if (editId) {
+      await updateDoc(doc(db, COLLECTION, editId), {
+        ...data, updatedAt: serverTimestamp(), by: sesi.email,
+      });
+      info.textContent = "✓ Diperbarui " + new Date().toLocaleTimeString("id-ID");
+    } else {
+      await addDoc(collection(db, COLLECTION), {
+        ...data,
+        pengisi: pengisiAktif(),
+        tanggal: tanggalAktif(),
+        hari: namaHari(tanggalAktif()),
+        jenis,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        by: sesi.email,
+      });
+      info.textContent = "✓ Ditambahkan " + new Date().toLocaleTimeString("id-ID");
+    }
+    resetForm(jenis); // kolom isian kosong, siap teks baru
   } catch (err) {
     info.textContent = "Gagal: " + (err?.message || err);
   } finally {
     btn.disabled = false;
-    btn.textContent = labelAsli;
   }
 }
 
-// ---------------------------------------------------------------------------
-// RIWAYAT
-// ---------------------------------------------------------------------------
-function renderRiwayat() {
-  const pengisi = pengisiAktif();
-  const rows = [...laporanCache.values()]
-    .filter((d) => d.pengisi === pengisi)
-    .sort((a, b) => (a.tanggal < b.tanggal ? 1 : -1))
-    .slice(0, 12);
-
-  const tbody = $("#riwayat-body");
-  if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="muted">Belum ada riwayat.</td></tr>`;
-    return;
+function mulaiEdit(jenis, id) {
+  const it = cache.get(id);
+  if (!it) return;
+  for (const [f, sel] of Object.entries(SECTIONS[jenis].fields)) $(sel).value = it[f] || "";
+  if (jenis === "realisasi") {
+    $("#f-refRencana").value = it.refId && cache.has(it.refId) ? it.refId : "";
   }
-  tbody.innerHTML = rows
-    .map((d) => {
-      const le = editTerakhir(d);
-      return `<tr>
-        <td><strong>${esc(d.tanggal)}</strong><br><span class="muted small">${esc(d.hari || namaHari(d.tanggal))}</span></td>
-        <td>${selWaktu(d, "rencana")}</td>
-        <td>${selWaktu(d, "realisasi")}</td>
-        <td>${selWaktu(d, "kendala")}</td>
-        <td>${le ? `${fmtWaktu(le.at)}<br><span class="muted small">${esc(le.by || "")}</span>` : "—"}</td>
-      </tr>`;
-    })
-    .join("");
+  $("#edit-" + jenis).value = id;
+  $("#btn-" + jenis).textContent = "Perbarui";
+  $("#cancel-" + jenis).hidden = false;
+  $("#info-" + jenis).textContent = "Mengedit item…";
+  const el = $(SECTIONS[jenis].fields.teks);
+  el.focus();
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-function selWaktu(d, bagian) {
-  const created = d[bagian + "CreatedAt"];
-  const updated = d[bagian + "UpdatedAt"];
-  if (!created && !updated) return `<span class="muted">—</span>`;
-  const ot = tepatWaktu(created, d.tanggal, DEADLINE[bagian]);
+async function hapus(id) {
+  const it = cache.get(id);
+  if (!it) return;
+  if (!confirm(`Hapus item ini?\n\n"${(it.teks || "").slice(0, 80)}"`)) return;
+  try { await deleteDoc(doc(db, COLLECTION, id)); }
+  catch (err) { alert("Gagal hapus: " + (err?.message || err)); }
+}
+
+function resetForm(jenis) {
+  for (const sel of Object.values(SECTIONS[jenis].fields)) $(sel).value = "";
+  if (jenis === "realisasi") $("#f-refRencana").value = "";
+  $("#edit-" + jenis).value = "";
+  $("#btn-" + jenis).textContent = SECTIONS[jenis].labelAdd;
+  $("#cancel-" + jenis).hidden = true;
+}
+
+// ---------------------------------------------------------------------------
+// RENDER FORM (daftar item + status)
+// ---------------------------------------------------------------------------
+function renderSemua() {
+  $("#f-hari").textContent = namaHari(tanggalAktif());
+  JENIS.forEach(renderList);
+  renderRefOptions();
+  refreshStatus();
+}
+
+function chip(t, cls = "") { return `<span class="chip ${cls}">${esc(t)}</span>`; }
+function chipLink(url) {
+  const u = (url || "").trim();
+  if (/^https?:\/\//i.test(u)) return `<a class="chip" href="${esc(u)}" target="_blank" rel="noopener noreferrer">bukti ↗</a>`;
+  return chip("bukti: " + u);
+}
+
+function tagsItem(jenis, it) {
+  if (jenis === "rencana") return it.terkait ? chip(it.terkait) : "";
+  if (jenis === "realisasi") {
+    return (it.status ? chip(it.status) : "") +
+      (it.output ? chipLink(it.output) : "") +
+      (it.refTeks ? chip("↳ " + it.refTeks.slice(0, 34), "ref") : "");
+  }
+  if (jenis === "kendala") {
+    return (it.jenisKendala ? chip(it.jenisKendala) : "") +
+      (it.nungguSiapa ? chip("⏳ " + it.nungguSiapa) : "");
+  }
+  return "";
+}
+
+function liHTML(jenis, it) {
+  const ot = tepatWaktu(it.createdAt, it.tanggal, SECTIONS[jenis].deadline);
   let badge = "";
   if (ot === true) badge = ` <span class="pill tiny ontime">tepat</span>`;
   else if (ot === false) badge = ` <span class="pill tiny late">telat</span>`;
-  const edit = sudahDiedit(created, updated) ? `<br><span class="muted small">diedit ${fmtWaktu(updated)}</span>` : "";
-  return `${fmtWaktu(created)}${badge}${edit}`;
+  let waktu = `Diisi ${fmtWaktu(it.createdAt)}${badge}`;
+  if (sudahDiedit(it.createdAt, it.updatedAt)) waktu += ` · diedit ${fmtWaktu(it.updatedAt)}`;
+  if (it.by) waktu += ` · ${esc(it.by)}`;
+  const tags = tagsItem(jenis, it);
+
+  return `<li class="entri-item">
+    <div class="entri-main">
+      <div class="entri-teks">${esc(it.teks || "")}</div>
+      ${tags ? `<div class="entri-tags">${tags}</div>` : ""}
+      <div class="entri-time muted small">${waktu}</div>
+    </div>
+    <div class="entri-actions">
+      <button type="button" class="btn btn-ghost small" data-edit="${esc(it.id)}">Edit</button>
+      <button type="button" class="btn btn-ghost small danger" data-del="${esc(it.id)}">Hapus</button>
+    </div>
+  </li>`;
 }
 
-function editTerakhir(d) {
-  let best = null;
-  for (const b of ["rencana", "realisasi", "kendala"]) {
-    const u = d[b + "UpdatedAt"];
-    if (u && u.seconds && (!best || u.seconds > best.sec)) {
-      best = { sec: u.seconds, at: u, by: d[b + "By"] };
-    }
-  }
-  return best;
+function renderList(jenis) {
+  const items = itemsAktif(jenis);
+  $("#count-" + jenis).textContent = items.length ? `${items.length} item` : "";
+  const ul = $("#list-" + jenis);
+  ul.innerHTML = items.length
+    ? items.map((it) => liHTML(jenis, it)).join("")
+    : `<li class="entri-empty muted">Belum ada ${jenis} untuk tanggal ini.</li>`;
+}
+
+function renderRefOptions() {
+  const sel = $("#f-refRencana");
+  const cur = sel.value;
+  const items = itemsAktif("rencana");
+  sel.innerHTML = `<option value="">— teks bebas —</option>` +
+    items.map((it) => `<option value="${esc(it.id)}">${esc((it.teks || "").slice(0, 70))}</option>`).join("");
+  if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
+}
+
+function refreshStatus() {
+  const p = pengisiAktif(), t = tanggalAktif();
+  const ada = (j) => [...cache.values()].some(
+    (it) => it.pengisi === p && it.tanggal === t && it.jenis === j && (it.teks || "").trim()
+  );
+  const s = statusHari(ada("rencana"), ada("realisasi"));
+  const el = $("#f-statusisi");
+  el.textContent = s;
+  el.className = "pill " + kelasStatusIsi(s);
 }
 
 // ---------------------------------------------------------------------------
@@ -306,10 +343,8 @@ function toDate(ts) {
 }
 function fmtWaktu(ts) {
   const d = toDate(ts);
-  if (!d) return "…"; // serverTimestamp masih pending
-  return d.toLocaleString("id-ID", {
-    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
-  });
+  if (!d) return "…";
+  return d.toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 function tepatWaktu(createdTs, tanggalISO, deadlineHour) {
   if (deadlineHour == null) return null;
@@ -322,24 +357,21 @@ function tepatWaktu(createdTs, tanggalISO, deadlineHour) {
 function sudahDiedit(createdTs, updatedTs) {
   const c = toDate(createdTs), u = toDate(updatedTs);
   if (!c || !u) return false;
-  return u.getTime() - c.getTime() > 1000; // beda > 1 detik
+  return u.getTime() - c.getTime() > 1000;
 }
 
 // ---------------------------------------------------------------------------
-// DATA REAL-TIME
+// LANGGANAN REAL-TIME
 // ---------------------------------------------------------------------------
-function langgananLaporan() {
-  if (unsubLaporan) unsubLaporan();
-  unsubLaporan = onSnapshot(
+function langganan() {
+  if (unsub) unsub();
+  unsub = onSnapshot(
     collection(db, COLLECTION),
     (snap) => {
-      laporanCache = new Map();
-      snap.forEach((d) => laporanCache.set(d.id, d.data()));
+      cache = new Map();
+      snap.forEach((d) => cache.set(d.id, { id: d.id, ...d.data() }));
       if (!$("#view-dashboard").hidden) renderDashboard();
-      if (!$("#view-form").hidden) {
-        renderRiwayat();
-        refreshMeta(); // perbarui label waktu tanpa mengubah input
-      }
+      if (!$("#view-form").hidden) renderSemua(); // form input tidak tersentuh
     },
     (err) => {
       console.error(err);
@@ -349,34 +381,55 @@ function langgananLaporan() {
 }
 
 // ---------------------------------------------------------------------------
-// DASHBOARD
+// STATUS ISI HARIAN
 // ---------------------------------------------------------------------------
+function statusHari(adaRencana, adaRealisasi) {
+  if (!adaRencana && !adaRealisasi) return "Tidak Dilaporkan";
+  if (adaRencana && adaRealisasi) return "Lengkap";
+  if (adaRencana) return "Belum Lengkap";
+  return "Rencana Kosong";
+}
 function kelasStatusIsi(s) {
-  return (
-    {
-      Lengkap: "ok",
-      "Belum Lengkap": "warn",
-      "Rencana Kosong": "warn",
-      "Tidak Dilaporkan": "bad",
-    }[s] || ""
-  );
+  return { Lengkap: "ok", "Belum Lengkap": "warn", "Rencana Kosong": "warn", "Tidak Dilaporkan": "bad" }[s] || "";
 }
 
+// ---------------------------------------------------------------------------
+// DASHBOARD
+// ---------------------------------------------------------------------------
 function renderDashboard() {
   const workdays = hariKerjaSampai();
-  $("#dash-info").textContent = `Per ${hariIni()} • ${workdays.length} hari kerja • ${laporanCache.size} isian tercatat`;
+  $("#dash-info").textContent =
+    `Per ${hariIni()} • ${workdays.length} hari kerja • ${cache.size} item tercatat`;
   renderKepatuhan(workdays);
   renderHitung("nungguSiapa", "#tbl-nunggu", "Pihak");
   renderHitung("jenisKendala", "#tbl-jenis", "Jenis");
   renderHitung("status", "#tbl-status", "Status");
 }
 
+// Peta pengisi__tanggal -> {r, real} berdasarkan keberadaan item
+function petaHari() {
+  const m = new Map();
+  for (const it of cache.values()) {
+    if (!(it.teks || "").trim()) continue;
+    const k = `${it.pengisi}__${it.tanggal}`;
+    let e = m.get(k);
+    if (!e) { e = { r: false, real: false }; m.set(k, e); }
+    if (it.jenis === "rencana") e.r = true;
+    if (it.jenis === "realisasi") e.real = true;
+  }
+  return m;
+}
+
 function renderKepatuhan(workdays) {
+  const peta = petaHari();
   const tbody = $("#tbl-kepatuhan tbody");
   const baris = URUTAN_PENGISI.map((pengisi) => {
     let lengkap = 0, belum = 0, kosong = 0, tidak = 0;
     for (const tgl of workdays) {
-      const s = statusIsi(laporanCache.get(`${pengisi}__${tgl}`));
+      const s = statusHari(...(() => {
+        const e = peta.get(`${pengisi}__${tgl}`);
+        return [!!e?.r, !!e?.real];
+      })());
       if (s === "Lengkap") lengkap++;
       else if (s === "Belum Lengkap") belum++;
       else if (s === "Rencana Kosong") kosong++;
@@ -386,27 +439,25 @@ function renderKepatuhan(workdays) {
     return { pengisi, lengkap, belum, kosong, tidak, persen: Math.round((lengkap / total) * 100) };
   });
 
-  tbody.innerHTML = baris
-    .map((r) => {
-      const flag = r.persen < AMBANG_KEPATUHAN ? "🚩" : "✓";
-      const barCls = r.persen < AMBANG_KEPATUHAN ? "bad" : r.persen < 95 ? "warn" : "ok";
-      return `<tr>
-        <td><strong>${esc(ROSTER[r.pengisi].nama)}</strong></td>
-        <td class="num">${workdays.length}</td>
-        <td class="num">${r.lengkap}</td>
-        <td class="num">${r.belum}</td>
-        <td class="num">${r.kosong}</td>
-        <td class="num">${r.tidak}</td>
-        <td><div class="bar"><span class="bar-fill ${barCls}" style="width:${r.persen}%"></span></div><span class="num">${r.persen}%</span></td>
-        <td class="center">${flag}</td>
-      </tr>`;
-    })
-    .join("");
+  tbody.innerHTML = baris.map((r) => {
+    const flag = r.persen < AMBANG_KEPATUHAN ? "🚩" : "✓";
+    const barCls = r.persen < AMBANG_KEPATUHAN ? "bad" : r.persen < 95 ? "warn" : "ok";
+    return `<tr>
+      <td><strong>${esc(ROSTER[r.pengisi].nama)}</strong></td>
+      <td class="num">${workdays.length}</td>
+      <td class="num">${r.lengkap}</td>
+      <td class="num">${r.belum}</td>
+      <td class="num">${r.kosong}</td>
+      <td class="num">${r.tidak}</td>
+      <td><div class="bar"><span class="bar-fill ${barCls}" style="width:${r.persen}%"></span></div><span class="num">${r.persen}%</span></td>
+      <td class="center">${flag}</td>
+    </tr>`;
+  }).join("");
 }
 
 function renderHitung(field, tblSel, labelKolom) {
   const counts = new Map();
-  for (const d of laporanCache.values()) {
+  for (const d of cache.values()) {
     const v = (d[field] || "").trim();
     if (!v) continue;
     counts.set(v, (counts.get(v) || 0) + 1);
@@ -417,18 +468,12 @@ function renderHitung(field, tblSel, labelKolom) {
   const tbl = $(tblSel);
   tbl.querySelector("thead").innerHTML = `<tr><th>${esc(labelKolom)}</th><th class="num">Total</th></tr>`;
   const tbody = tbl.querySelector("tbody");
-  if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="2" class="muted">Belum ada data.</td></tr>`;
-    return;
-  }
-  tbody.innerHTML = rows
-    .map(
-      ([k, v]) => `<tr>
+  tbody.innerHTML = rows.length
+    ? rows.map(([k, v]) => `<tr>
         <td>${esc(k)}<div class="bar mini"><span class="bar-fill" style="width:${maxV ? (v / maxV) * 100 : 0}%"></span></div></td>
         <td class="num">${v}</td>
-      </tr>`
-    )
-    .join("");
+      </tr>`).join("")
+    : `<tr><td colspan="2" class="muted">Belum ada data.</td></tr>`;
 }
 
 // ---------------------------------------------------------------------------

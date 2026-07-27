@@ -53,11 +53,15 @@ service cloud.firestore {
       return allowlist()[emailSaya()];
     }
 
-    match /laporan/{docId} {
+    match /entri/{docId} {
       allow read: if terdaftar();
-      allow create, update: if terdaftar()
+      allow create: if terdaftar()
         && (isAdmin() || request.resource.data.pengisi == kodeSaya());
-      allow delete: if isAdmin();
+      allow update: if terdaftar()
+        && (isAdmin() || resource.data.pengisi == kodeSaya())
+        && (isAdmin() || request.resource.data.pengisi == kodeSaya());
+      allow delete: if terdaftar()
+        && (isAdmin() || resource.data.pengisi == kodeSaya());
     }
 
     // Tolak akses ke koleksi lain.

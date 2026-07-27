@@ -78,99 +78,102 @@
           </div>
         </div>
 
-        <!-- 1. RENCANA (pagi, sebelum 10.00) -->
-        <form id="form-rencana" class="card sec accent-coral">
+        <!-- 1. RENCANA -->
+        <section class="card sec accent-coral">
           <div class="sec-head">
             <h3>1. Rencana <span class="hint">— pagi, sebelum 10.00</span></h3>
-            <span id="meta-rencana" class="meta muted">Belum diisi</span>
+            <span id="count-rencana" class="meta muted"></span>
           </div>
-          <div class="field">
-            <label for="f-rencana">Rencana Hari Ini</label>
-            <textarea id="f-rencana" rows="2" placeholder="Apa yang direncanakan hari ini…"></textarea>
-          </div>
-          <div class="field">
-            <label for="f-terkait">Terkait</label>
-            <select id="f-terkait"></select>
-          </div>
-          <div class="sec-foot">
-            <span id="info-rencana" class="muted small"></span>
-            <button type="submit" id="btn-rencana" class="btn btn-primary">Simpan Rencana</button>
-          </div>
-        </form>
+          <ul class="entri-list" id="list-rencana"></ul>
+          <form id="form-rencana" class="entri-form">
+            <input type="hidden" id="edit-rencana" />
+            <div class="field">
+              <label for="f-rencana">Rencana</label>
+              <textarea id="f-rencana" rows="2" placeholder="Satu rencana / tugas untuk hari ini…"></textarea>
+            </div>
+            <div class="field">
+              <label for="f-terkait">Terkait</label>
+              <select id="f-terkait"></select>
+            </div>
+            <div class="sec-foot">
+              <span id="info-rencana" class="muted small"></span>
+              <div class="btn-row">
+                <button type="button" id="cancel-rencana" class="btn btn-ghost small" hidden>Batal</button>
+                <button type="submit" id="btn-rencana" class="btn btn-primary">Tambah Rencana</button>
+              </div>
+            </div>
+          </form>
+        </section>
 
-        <!-- 2. REALISASI (malam, sebelum 21.00) -->
-        <form id="form-realisasi" class="card sec accent-teal">
+        <!-- 2. REALISASI -->
+        <section class="card sec accent-teal">
           <div class="sec-head">
             <h3>2. Realisasi <span class="hint">— sebelum 21.00</span></h3>
-            <span id="meta-realisasi" class="meta muted">Belum diisi</span>
+            <span id="count-realisasi" class="meta muted"></span>
           </div>
-          <div class="field">
-            <label for="f-realisasi">Realisasi s/d 21.00</label>
-            <textarea id="f-realisasi" rows="2" placeholder="Apa yang benar-benar selesai…"></textarea>
-          </div>
-          <div class="field">
-            <label for="f-output">Output / Bukti (link)</label>
-            <input type="text" id="f-output" placeholder="https://… atau keterangan bukti" />
-          </div>
-          <div class="grid-2">
+          <ul class="entri-list" id="list-realisasi"></ul>
+          <form id="form-realisasi" class="entri-form">
+            <input type="hidden" id="edit-realisasi" />
             <div class="field">
-              <label for="f-status">Status</label>
-              <select id="f-status"></select>
+              <label for="f-refRencana">Berdasarkan rencana <span class="hint">(opsional — pilih, atau tulis bebas)</span></label>
+              <select id="f-refRencana"><option value="">— teks bebas —</option></select>
             </div>
             <div class="field">
-              <label for="f-rencanaBesok">Rencana Besok</label>
-              <input type="text" id="f-rencanaBesok" placeholder="Rencana singkat untuk besok…" />
+              <label for="f-realisasi">Realisasi</label>
+              <textarea id="f-realisasi" rows="2" placeholder="Apa yang benar-benar selesai…"></textarea>
             </div>
-          </div>
-          <div class="sec-foot">
-            <span id="info-realisasi" class="muted small"></span>
-            <button type="submit" id="btn-realisasi" class="btn btn-primary">Simpan Realisasi</button>
-          </div>
-        </form>
+            <div class="grid-2">
+              <div class="field">
+                <label for="f-output">Output / Bukti (link)</label>
+                <input type="text" id="f-output" placeholder="https://… atau keterangan bukti" />
+              </div>
+              <div class="field">
+                <label for="f-status">Status</label>
+                <select id="f-status"></select>
+              </div>
+            </div>
+            <div class="sec-foot">
+              <span id="info-realisasi" class="muted small"></span>
+              <div class="btn-row">
+                <button type="button" id="cancel-realisasi" class="btn btn-ghost small" hidden>Batal</button>
+                <button type="submit" id="btn-realisasi" class="btn btn-primary">Tambah Realisasi</button>
+              </div>
+            </div>
+          </form>
+        </section>
 
-        <!-- 3. KENDALA (terpisah) -->
-        <form id="form-kendala" class="card sec accent-amber">
+        <!-- 3. KENDALA -->
+        <section class="card sec accent-amber">
           <div class="sec-head">
             <h3>3. Kendala <span class="hint">— terpisah</span></h3>
-            <span id="meta-kendala" class="meta muted">Belum diisi</span>
+            <span id="count-kendala" class="meta muted"></span>
           </div>
-          <div class="field">
-            <label for="f-kendala">Kendala <span class="hint">(fakta, bukan opini)</span></label>
-            <textarea id="f-kendala" rows="2" placeholder="Fakta kendala…"></textarea>
-          </div>
-          <div class="grid-2">
+          <ul class="entri-list" id="list-kendala"></ul>
+          <form id="form-kendala" class="entri-form">
+            <input type="hidden" id="edit-kendala" />
             <div class="field">
-              <label for="f-jenisKendala">Jenis Kendala</label>
-              <select id="f-jenisKendala"></select>
+              <label for="f-kendala">Kendala <span class="hint">(fakta, bukan opini)</span></label>
+              <textarea id="f-kendala" rows="2" placeholder="Fakta kendala…"></textarea>
             </div>
-            <div class="field">
-              <label for="f-nungguSiapa">Nunggu Siapa</label>
-              <select id="f-nungguSiapa"></select>
+            <div class="grid-2">
+              <div class="field">
+                <label for="f-jenisKendala">Jenis Kendala</label>
+                <select id="f-jenisKendala"></select>
+              </div>
+              <div class="field">
+                <label for="f-nungguSiapa">Nunggu Siapa</label>
+                <select id="f-nungguSiapa"></select>
+              </div>
             </div>
-          </div>
-          <div class="sec-foot">
-            <span id="info-kendala" class="muted small"></span>
-            <button type="submit" id="btn-kendala" class="btn btn-primary">Simpan Kendala</button>
-          </div>
-        </form>
-
-        <div class="card">
-          <h3>Riwayat isian terbaru</h3>
-          <div class="table-wrap">
-            <table class="tbl">
-              <thead>
-                <tr>
-                  <th>Tanggal</th>
-                  <th>Rencana diisi</th>
-                  <th>Realisasi diisi</th>
-                  <th>Kendala diisi</th>
-                  <th>Terakhir diedit</th>
-                </tr>
-              </thead>
-              <tbody id="riwayat-body"></tbody>
-            </table>
-          </div>
-        </div>
+            <div class="sec-foot">
+              <span id="info-kendala" class="muted small"></span>
+              <div class="btn-row">
+                <button type="button" id="cancel-kendala" class="btn btn-ghost small" hidden>Batal</button>
+                <button type="submit" id="btn-kendala" class="btn btn-primary">Tambah Kendala</button>
+              </div>
+            </div>
+          </form>
+        </section>
       </div>
 
       <!-- VIEW: DASHBOARD -->

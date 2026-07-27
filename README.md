@@ -78,25 +78,23 @@ Admin diatur di `ADMIN_EMAILS` (config.js) dan `admins()` (rules).
 
 ## 🗂️ Struktur data (Firestore)
 
-Koleksi **`laporan`**, id dokumen = `PENGISI__YYYY-MM-DD` (mis. `ALI__2026-07-28`).
+Koleksi **`entri`** — **satu dokumen per item** (bisa banyak rencana/realisasi/kendala
+per orang per hari). Id dokumen otomatis.
 
 | Field | Isi |
 |---|---|
 | `pengisi` | kode pengisi (DAFFA/ALI/…) |
 | `tanggal` | `YYYY-MM-DD` |
 | `hari` | nama hari (otomatis) |
-| `rencana` | Rencana Hari Ini |
-| `realisasi` | Realisasi s/d 21.00 |
-| `output` | Output / Bukti (link) |
-| `terkait` | dropdown Terkait |
-| `status` | dropdown Status |
-| `kendala` | Kendala |
-| `jenisKendala` | dropdown Jenis Kendala |
-| `nungguSiapa` | dropdown Nunggu Siapa |
-| `rencanaBesok` | Rencana Besok |
-| `updatedByEmail`, `updatedAt` | jejak audit (otomatis) |
+| `jenis` | `rencana` \| `realisasi` \| `kendala` |
+| `teks` | isi utama item |
+| `terkait` | (rencana) dropdown Terkait |
+| `output`, `status` | (realisasi) bukti & dropdown Status |
+| `refId`, `refTeks` | (realisasi) rujukan ke item rencana, opsional |
+| `jenisKendala`, `nungguSiapa` | (kendala) dropdown |
+| `createdAt`, `updatedAt`, `by` | timestamp isi & edit + email pengisi (otomatis) |
 
-`Hari` dan `Status Isi` dihitung otomatis dan tidak disimpan sebagai sumber kebenaran.
+Dashboard, `Status Isi`, dan penanda tepat/terlambat dihitung otomatis dari item-item ini.
 
 ---
 
